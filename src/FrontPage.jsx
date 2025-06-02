@@ -5,19 +5,6 @@ export default function FrontPage() {
   const [input, setInput] = useState("");
   const [articles, setArticles] = useState([]);
   const [datetime, setDatetime] = useState("");
-  const [chatInputs, setChatInputs] = useState({});
-  const [chatResponses, setChatResponses] = useState({});
-
-  // Poliittinen bias-sanakirja USA-lähteille
-  const politicalBias = {
-    "Fox News": "Republikaani",
-    "CNN": "Demokraatti",
-    "New York Times": "Demokraatti",
-    "Washington Post": "Demokraatti",
-    "Breitbart News": "Republikaani",
-    "NPR": "Neutraali",
-    "Associated Press": "Neutraali",
-  };
 
   useEffect(() => {
     const now = new Date();
@@ -31,78 +18,62 @@ export default function FrontPage() {
     });
     setDatetime(formatted);
 
+    // Fontti lehden nimeen
     const link = document.createElement("link");
     link.href = "https://fonts.googleapis.com/css2?family=UnifrakturCook:wght@700&display=swap";
     link.rel = "stylesheet";
     document.head.appendChild(link);
-
-    // Testiuutiset kotimaasta, Euroopasta ja USA:sta
-    setArticles([
-      {
-        title: "Yhdysvaltain työttömyys laski yllättäen",
-        source: "Reuters",
-        timestamp: "2.6.2025 08:45",
-        ingress:
-          "Työttömyys Yhdysvalloissa laski toukokuussa 3,4 prosenttiin. Analyytikot eivät odottaneet näin nopeaa toipumista.",
-      },
-      {
-        title: "Tekoäly kehittää omia algoritmejaan",
-        source: "MIT News",
-        timestamp: "2.6.2025 10:15",
-        ingress:
-          "Massachusettsin teknillinen instituutti raportoi, että suuri kielimalli kehitti uudenlaisen tekstianalyysimenetelmän ilman ihmisen ohjausta.",
-      },
-      {
-        title: "HS: Sää muuttuu kesäiseksi",
-        source: "HS",
-        timestamp: "2.6.2025 07:30",
-        ingress: "Ilmatieteen laitoksen mukaan kesä tuo lämpöä ja aurinkoa koko maahan.",
-      },
-      {
-        title: "BBC: Euroopan talous vahvistuu",
-        source: "BBC",
-        timestamp: "2.6.2025 09:00",
-        ingress: "Euroalueen talouskasvu on odotettua vahvempaa, kertoo Euroopan komissio.",
-      },
-      {
-        title: "Fox News: Presidentti pitää puheen republikaanien leirissä",
-        source: "Fox News",
-        timestamp: "2.6.2025 11:00",
-        ingress:
-          "Presidentti puhuu maan tulevaisuudesta ja korostaa perhearvoja republikaanien tilaisuudessa.",
-      },
-    ]);
   }, []);
 
-  const handleSuggest = () => {
-    if (input.trim()) {
-      setTopics((prev) => [...prev, input.trim()]);
-      setInput("");
+  const getSuggestedSource = (topic) => {
+    const topicLower = topic.toLowerCase();
+
+    if (topicLower.includes("eu") || topicLower.includes("eurooppa")) return "POLITICO (EU)";
+    if (topicLower.includes("biden") || topicLower.includes("demokraatit")) return "CNN (dem)";
+    if (topicLower.includes("trump") || topicLower.includes("republikaanit")) return "Fox News (rep)";
+    if (topicLower.includes("helsinki") || topicLower.includes("suomi")) return "HS";
+    if (topicLower.includes("yle")) return "YLE";
+
+    // Oletus
+    return "GPT-3.5";
+  };
+
+  const handleSuggest = async () => {
+    if (!input.trim()) return;
+
+    const topic = input.trim();
+    const source = getSuggestedSource(topic);
+
+    setInput("");
+    setTopics((prev) => [...prev, topic]);
+
+    try {
+      const res = await fetch("/.netlify/functions/ai-news", {
+        method: "POST",
+        body: JSON.stringify({ topic }),
+      });
+
+      const data = await res.json();
+
+      setArticles((prev) => [
+        ...prev,
+        {
+          title: topic,
+          ingress: data.ingress,
+          source: source,
+          timestamp: new Date().toLocaleString("fi-FI"),
+        },
+      ]);
+    } catch (error) {
+      console.error("Virhe AI-haussa:", error);
     }
-  };
-
-  const handleChatInput = (idx, value) => {
-    setChatInputs((prev) => ({ ...prev, [idx]: value }));
-  };
-
-  const handleSendChat = (idx) => {
-    const query = chatInputs[idx];
-    if (!query) return;
-    // Mockattu vastaus — oikea AI-haun voisi korvata API-kutsulla
-    setChatResponses((prev) => ({
-      ...prev,
-      [idx]: `Tämä on tekoälyn vastaus kysymykseen: “${query}”`,
-    }));
   };
 
   return (
     <div className="min-h-screen bg-white text-black">
       <header className="w-full border-b p-4 flex justify-between items-center sticky top-0 bg-white z-50">
         <div>
-          <h1
-            className="text-3xl tracking-wider"
-            style={{ fontFamily: "UnifrakturCook, cursive" }}
-          >
+          <h1 className="text-3xl tracking-wider" style={{ fontFamily: 'UnifrakturCook, cursive' }}>
             Papan tekoälysanomat
           </h1>
           <p className="text-sm text-gray-600 mt-1">{datetime}</p>
@@ -114,9 +85,7 @@ export default function FrontPage() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
-          <button className="border px-3 py-1" onClick={handleSuggest}>
-            +
-          </button>
+          <button className="border px-3 py-1" onClick={handleSuggest}>+</button>
         </div>
       </header>
 
@@ -134,31 +103,11 @@ export default function FrontPage() {
         {articles.map((article, idx) => (
           <div key={idx} className="border p-4 rounded shadow">
             <h2 className="text-xl font-bold mb-2">{article.title}</h2>
-            <p className="text-sm italic text-gray-600 mb-2">
-              {article.source} – {article.timestamp}
-            </p>
+            <p className="text-sm italic text-gray-600 mb-2">{article.source} – {article.timestamp}</p>
             <p className="mb-4 text-base leading-snug">{article.ingress}</p>
-            <p className="text-xs italic text-gray-500 mt-1">
-              Poliittinen painotus: {politicalBias[article.source] || "Neutraali"}
-            </p>
             <div className="mt-4">
-              <input
-                placeholder="Kysy lisää tästä uutisesta..."
-                className="border p-2 w-full"
-                value={chatInputs[idx] || ""}
-                onChange={(e) => handleChatInput(idx, e.target.value)}
-              />
-              <button
-                className="mt-2 w-full border p-2"
-                onClick={() => handleSendChat(idx)}
-              >
-                Lähetä
-              </button>
-              {chatResponses[idx] && (
-                <p className="mt-2 text-sm text-blue-700 bg-blue-50 p-2 rounded">
-                  {chatResponses[idx]}
-                </p>
-              )}
+              <input placeholder="Kysy lisää tästä uutisesta..." className="border p-2 w-full" />
+              <button className="mt-2 w-full border p-2">Lähetä</button>
             </div>
           </div>
         ))}
